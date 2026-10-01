@@ -3,6 +3,8 @@ import 'package:path/path.dart' as p;
 
 import 'models.dart';
 import 'helpers.dart';
+import 'extras_schema.dart';
+import 'stock_ledger.dart';
 
 class AppDatabase {
   AppDatabase._();
@@ -13,7 +15,7 @@ class AppDatabase {
 
   // Version 2 introduces plots, sprays and spray chemicals.
   // Existing chemical data is preserved.
-  static const int _databaseVersion = 6;
+  static const int _databaseVersion = 7;
 
   Database? _database;
 
@@ -49,6 +51,7 @@ class AppDatabase {
         await _createNewTables(db);
         await _createDripTables(db);
         await _createFinanceTables(db);
+        await createExtraTables(db);
         await db.execute('''
           CREATE UNIQUE INDEX IF NOT EXISTS idx_chemicals_name_ci
           ON chemicals(name COLLATE NOCASE)
@@ -74,6 +77,9 @@ class AppDatabase {
         if (oldVersion < 6) {
           await _createFinanceTables(db);
         }
+        if (oldVersion < 7) {
+          await createExtraTables(db);
+        }
       },
       onOpen: (db) async {
         // Safety net: if a previous install ever stamped the database
@@ -84,6 +90,7 @@ class AppDatabase {
         await _createNewTables(db);
         await _createDripTables(db);
         await _createFinanceTables(db);
+        await createExtraTables(db);
         await _addChemicalUnitColumn(db);
         await _repairChemicalLinks(db);
       },
@@ -532,6 +539,7 @@ class AppDatabase {
       for (final spray in sprays) {
         final sprayId = spray['id'] as int;
 
+        await StockLedger.removeUse(txn, 'spray', sprayId);
         await txn.delete(
           'spray_chemicals',
           where: 'spray_id = ?',
@@ -549,6 +557,8 @@ class AppDatabase {
       await txn.delete('other_expenses', where: 'plot_id = ?', whereArgs: [id]);
       await txn.delete('earnings', where: 'plot_id = ?', whereArgs: [id]);
       await txn.delete('app_settings', where: 'key = ?', whereArgs: ['last_page_$id']);
+      await txn.delete('tasks', where: 'plot_id = ?', whereArgs: [id]);
+      await txn.delete('reminder_rules', where: 'plot_id = ?', whereArgs: [id]);
       await txn.delete(
         'plots',
         where: 'id = ?',
@@ -674,6 +684,16 @@ class AppDatabase {
         });
       }
 
+      await StockLedger.syncUse(
+        txn,
+        refType: 'spray',
+        refId: sprayId,
+        date: date,
+        uses: [
+          for (final c in chemicals) StockUse(c.name, water * c.dosage),
+        ],
+      );
+
       return sprayId;
     });
   }
@@ -719,6 +739,16 @@ class AppDatabase {
           'cost': water * chemical.dosage * chemical.price,
         });
       }
+
+      await StockLedger.syncUse(
+        txn,
+        refType: 'spray',
+        refId: sprayId,
+        date: date,
+        uses: [
+          for (final c in chemicals) StockUse(c.name, water * c.dosage),
+        ],
+      );
     });
   }
 
@@ -731,6 +761,8 @@ class AppDatabase {
         where: 'spray_id = ?',
         whereArgs: [sprayId],
       );
+
+      await StockLedger.removeUse(txn, 'spray', sprayId);
 
       await txn.delete(
         'sprays',
@@ -813,6 +845,20 @@ class AppDatabase {
           'cost': cost,
         });
       }
+
+      await StockLedger.syncUse(
+        txn,
+        refType: 'drip',
+        refId: dripId,
+        date: date,
+        uses: [
+          for (final c in chemicals)
+            StockUse(
+              c.name,
+              acres * c.dosage * dripDosageMultiplier(c.dosageUnit, c.unit),
+            ),
+        ],
+      );
       return dripId;
     });
   }
@@ -861,6 +907,20 @@ class AppDatabase {
           'cost': cost,
         });
       }
+
+      await StockLedger.syncUse(
+        txn,
+        refType: 'drip',
+        refId: dripId,
+        date: date,
+        uses: [
+          for (final c in chemicals)
+            StockUse(
+              c.name,
+              acres * c.dosage * dripDosageMultiplier(c.dosageUnit, c.unit),
+            ),
+        ],
+      );
     });
   }
 
@@ -872,6 +932,7 @@ class AppDatabase {
         where: 'drip_id = ?',
         whereArgs: [dripId],
       );
+      await StockLedger.removeUse(txn, 'drip', dripId);
       await txn.delete(
         'drip_applications',
         where: 'id = ?',

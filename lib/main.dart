@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'database.dart';
+import 'extras_ui.dart';
 import 'pages.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppDatabase.instance.database;
+  WidgetsBinding.instance.addObserver(ExtrasLifecycle());
   runApp(const AgriSprayOfflineApp());
+  ExtrasHooks.onAppStart();
 }
 
 class AgriSprayOfflineApp extends StatelessWidget {
@@ -19,6 +22,7 @@ class AgriSprayOfflineApp extends StatelessWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: extrasNavigatorKey,
       title: 'FarmBook',
       theme: ThemeData(
         useMaterial3: true,

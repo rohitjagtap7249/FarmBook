@@ -10,6 +10,8 @@ import 'package:share_plus/share_plus.dart';
 import 'database.dart';
 import 'helpers.dart';
 import 'models.dart';
+import 'activity_queries.dart';
+import 'extras_ui.dart';
 
 
 /// Compact date for dense mobile tables, e.g. 5 Sep or 1 Jan.
@@ -178,15 +180,22 @@ class _FarmDashboardPageState extends State<FarmDashboardPage> {
 
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
-    final plots = await AppDatabase.instance.getPlots();
+    // Plots ordered by most recent farm ACTIVITY (not by creation date).
+    final plots = await AppDatabase.instance.getPlotsByRecentActivity();
 
-    // Only look up "last spray" for a handful of plots shown on the
-    // dashboard, to keep this screen light.
+    // Only look up "last spray" for the plot that represents each of the
+    // crop cards shown on the dashboard, to keep this screen light.
     final lastSprays = <int, Map<String, dynamic>?>{};
-    for (final plot in plots.take(6)) {
+    final seenCrops = <String>{};
+    for (final plot in plots) {
+      final crop = plot['crop_variety'].toString().trim();
+      final key = crop.isEmpty ? plot['title'].toString() : crop;
+      if (!seenCrops.add(key)) continue;
+      if (seenCrops.length > 3) break;
       final id = plot['id'] as int;
       lastSprays[id] = await AppDatabase.instance.getLastSprayForPlot(id);
     }
+    ExtrasHooks.onHomeLoaded();
 
     if (!mounted) return;
     setState(() {
@@ -234,10 +243,10 @@ class _FarmDashboardPageState extends State<FarmDashboardPage> {
   }
 
   Future<void> _quickAction(String action) async {
-    // Chemicals is not tied to a specific plot, so it skips the plot picker.
-    if (action == 'chemicals') {
+    // Add Task opens the Task Manager; the plot is chosen inside the form.
+    if (action == 'task') {
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ChemicalsPage()),
+        MaterialPageRoute(builder: (_) => const AddTaskPage()),
       );
       await _load();
       return;
@@ -335,9 +344,9 @@ class _FarmDashboardPageState extends State<FarmDashboardPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _FbQuickAction(
-                    icon: Icons.groups,
-                    label: 'Labour',
-                    onTap: () => _quickAction('labour'),
+                    icon: Icons.add_task,
+                    label: 'Add Task',
+                    onTap: () => _quickAction('task'),
                   ),
                 ),
               ],
@@ -347,9 +356,9 @@ class _FarmDashboardPageState extends State<FarmDashboardPage> {
               children: [
                 Expanded(
                   child: _FbQuickAction(
-                    icon: Icons.local_pharmacy,
-                    label: 'Chemicals',
-                    onTap: () => _quickAction('chemicals'),
+                    icon: Icons.groups,
+                    label: 'Labour',
+                    onTap: () => _quickAction('labour'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -377,7 +386,7 @@ class _FarmDashboardPageState extends State<FarmDashboardPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Recent crops',
+                  'Recent Activities',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                 ),
                 TextButton(
@@ -654,6 +663,24 @@ class _MorePageState extends State<MorePage> {
               MaterialPageRoute(builder: (_) => const FarmOverviewPage()),
             ),
           ),
+          ListTile(
+            leading: const Icon(Icons.inventory_2_outlined),
+            title: const Text('Chemical Stock'),
+            subtitle: const Text('Optional stock, purchases and low-stock alerts.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ChemicalStockPage()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.auto_awesome_outlined),
+            title: const Text('Magic Reminder'),
+            subtitle: const Text('Gentle reminders from your own farm records.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MagicReminderPage()),
+            ),
+          ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.backup_outlined),
@@ -809,6 +836,8 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
             icon: const Icon(Icons.download),
             label: const Text('Restore from backup'),
           ),
+          const SizedBox(height: 24),
+          const OnlineBackupSection(),
           if (_busy) ...[
             const SizedBox(height: 20),
             const Center(child: CircularProgressIndicator()),
@@ -1951,7 +1980,6 @@ class _PlotHistoryPageState extends State<PlotHistoryPage> {
       appBar: AppBar(
         title: const Text('FarmBook'),
         actions: [
-          IconButton(tooltip: 'Farm Overview', icon: const Icon(Icons.analytics_outlined), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FarmOverviewPage()))),
           IconButton(tooltip: 'Settings', icon: const Icon(Icons.settings), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsPage()))),
           PopupMenuButton<String>(
             tooltip: 'Backup or restore history',
@@ -2178,10 +2206,31 @@ class _PlotOverviewPageState extends State<PlotOverviewPage> {
       appBar: AppBar(
         title: Text(widget.plotTitle),
         actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AddTaskPage(initialPlotId: widget.plotId),
+              ),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+            ),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Task'),
+          ),
           IconButton(
-            tooltip: 'Export this plot',
+            tooltip: 'Share / export this plot',
             icon: const Icon(Icons.share),
-            onPressed: _exportPlot,
+            onPressed: () => showPlotShareSheet(
+              context,
+              plotId: widget.plotId,
+              plotTitle: widget.plotTitle,
+              plotName: widget.plotName,
+              cropVariety: widget.cropVariety,
+              onExportData: _exportPlot,
+            ),
           ),
           IconButton(
             tooltip: 'Plot information',
