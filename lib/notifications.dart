@@ -30,7 +30,7 @@ class NotificationService {
     if (_ready) return;
     try {
       tzdata.initializeTimeZones();
-      const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const android = AndroidInitializationSettings('@drawable/ic_stat_farmbook');
       await _plugin.initialize(
         const InitializationSettings(android: android),
         onDidReceiveNotificationResponse: (response) {
@@ -84,6 +84,8 @@ class NotificationService {
         channelDescription: 'Task and Magic Reminder notifications',
         importance: Importance.high,
         priority: Priority.high,
+        icon: '@drawable/ic_stat_farmbook',
+        color: const Color(0xFF42A5F5),
         visibility: NotificationVisibility.public,
         styleInformation: BigTextStyleInformation(body),
       ),
