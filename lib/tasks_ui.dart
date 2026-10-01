@@ -51,6 +51,69 @@ class _TasksPageState extends State<TasksPage> {
     });
   }
 
+  Future<void> _checkReminders() async {
+    final service = NotificationService.instance;
+    await service.requestPermission();
+    final info = await service.diagnose();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Check reminders'),
+        content: Text(info),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await service.showNow(
+                id: 999998,
+                title: 'FarmBook test',
+                body: 'If you can see this, notifications work.',
+              );
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ok
+                        ? 'Sent. Pull down the status bar if you do not see it.'
+                        : 'Could not show: ${service.lastError}',
+                  ),
+                ),
+              );
+            },
+            child: const Text('Show now'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await service.schedule(
+                id: 999999,
+                title: 'FarmBook test reminder',
+                body: 'This was scheduled 20 seconds ago.',
+                when: DateTime.now().add(const Duration(seconds: 20)),
+              );
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ok
+                        ? 'Scheduled for 20 seconds. Lock the screen and wait.'
+                        : 'Could not schedule: ${service.lastError}',
+                  ),
+                ),
+              );
+            },
+            child: const Text('In 20 seconds'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openEditor([Map<String, dynamic>? task]) async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AddTaskPage(task: task)),
@@ -86,27 +149,9 @@ class _TasksPageState extends State<TasksPage> {
         title: const Text('Tasks'),
         actions: [
           IconButton(
-            tooltip: 'Send a test reminder',
+            tooltip: 'Check reminders',
             icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              await NotificationService.instance.requestPermission();
-              await NotificationService.instance.schedule(
-                id: 999999,
-                title: 'FarmBook test reminder',
-                body: 'If you can see this, task reminders will work.',
-                when: DateTime.now().add(const Duration(seconds: 10)),
-                payload: 'task:0',
-              );
-              messenger.showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Test reminder in 10 seconds. Leave the app or lock the '
-                    'screen to see it pop up.',
-                  ),
-                ),
-              );
-            },
+            onPressed: _checkReminders,
           ),
         ],
       ),

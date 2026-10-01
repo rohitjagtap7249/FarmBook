@@ -23,6 +23,9 @@ class NotificationService {
   /// Called with the notification payload when the user taps a notification.
   void Function(String payload)? onTapPayload;
 
+  /// Last problem seen while showing or scheduling (shown in diagnostics).
+  String lastError = '';
+
   Future<void> init() async {
     if (_ready) return;
     try {
@@ -63,9 +66,6 @@ class NotificationService {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       final granted = await android?.requestNotificationsPermission();
-      try {
-        await android?.requestExactAlarmsPermission();
-      } catch (_) {}
       return granted ?? true;
     } catch (e) {
       debugPrint('Permission request failed: $e');
@@ -73,27 +73,26 @@ class NotificationService {
     }
   }
 
-  NotificationDetails _details() {
-    return const NotificationDetails(
+  /// A normal notification, like payment or shopping apps send: a banner at
+  /// the top of the screen, default sound, and an entry in the notification
+  /// shade. No alarm sound and no full-screen takeover.
+  NotificationDetails _details(String body) {
+    return NotificationDetails(
       android: AndroidNotificationDetails(
-        'farmbook_reminders_v2',
+        'farmbook_reminders_v3',
         'FarmBook reminders',
         channelDescription: 'Task and Magic Reminder notifications',
-        importance: Importance.max,
-        priority: Priority.max,
-        category: AndroidNotificationCategory.reminder,
+        importance: Importance.high,
+        priority: Priority.high,
         visibility: NotificationVisibility.public,
-        playSound: true,
-        enableVibration: true,
-        ticker: 'FarmBook reminder',
-        styleInformation: BigTextStyleInformation(''),
+        styleInformation: BigTextStyleInformation(body),
       ),
     );
   }
 
   /// Schedules a notification at [when] (device local time). Times in the
   /// past are ignored. A notification with the same [id] is replaced.
-  Future<void> schedule({
+  Future<bool> schedule({
     required int id,
     required String title,
     required String body,
@@ -102,9 +101,12 @@ class NotificationService {
   }) async {
     try {
       await init();
-      if (!_ready) return;
-      if (when.isBefore(DateTime.now().add(const Duration(seconds: 10)))) {
-        return;
+      if (!_ready) {
+        lastError = 'Notifications could not start.';
+        return false;
+      }
+      if (when.isBefore(DateTime.now().add(const Duration(seconds: 2)))) {
+        return false;
       }
       final u = when.toUtc();
       final scheduled =
@@ -115,7 +117,7 @@ class NotificationService {
           title,
           body,
           scheduled,
-          _details(),
+          _details(body),
           androidScheduleMode: mode,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
@@ -130,12 +132,15 @@ class NotificationService {
         // Exact alarms not allowed on this phone: fall back to a close time.
         await go(AndroidScheduleMode.inexactAllowWhileIdle);
       }
+      return true;
     } catch (e) {
-      debugPrint('Schedule failed: $e');
+      lastError = 'Schedule failed: $e';
+      debugPrint(lastError);
+      return false;
     }
   }
 
-  Future<void> showNow({
+  Future<bool> showNow({
     required int id,
     required String title,
     required String body,
@@ -143,11 +148,40 @@ class NotificationService {
   }) async {
     try {
       await init();
-      if (!_ready) return;
-      await _plugin.show(id, title, body, _details(), payload: payload);
+      if (!_ready) {
+        lastError = 'Notifications could not start.';
+        return false;
+      }
+      await _plugin.show(id, title, body, _details(body), payload: payload);
+      return true;
     } catch (e) {
-      debugPrint('Show failed: $e');
+      lastError = 'Show failed: $e';
+      debugPrint(lastError);
+      return false;
     }
+  }
+
+  /// Plain-language status used by the "Check reminders" dialog.
+  Future<String> diagnose() async {
+    final lines = <String>[];
+    try {
+      await init();
+      lines.add('Started: ${_ready ? 'yes' : 'NO'}');
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      final enabled = await android?.areNotificationsEnabled();
+      lines.add('Notifications allowed: ${enabled == null ? '?' : (enabled ? 'yes' : 'NO')}');
+      try {
+        final exact = await android?.canScheduleExactNotifications();
+        lines.add('Exact alarms allowed: ${exact == null ? '?' : (exact ? 'yes' : 'no')}');
+      } catch (_) {}
+      final pending = await _plugin.pendingNotificationRequests();
+      lines.add('Reminders waiting: ${pending.length}');
+    } catch (e) {
+      lines.add('Check failed: $e');
+    }
+    lines.add('Last problem: ${lastError.isEmpty ? 'none' : lastError}');
+    return lines.join('\n');
   }
 
   Future<void> cancel(int id) async {
