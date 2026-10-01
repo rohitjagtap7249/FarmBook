@@ -177,6 +177,12 @@ jobs:
           print('Code shrinking disabled')
           PY
 
+      - name: Create FarmBook app icons
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 make_icons.py android/app/src/main/res
+          ls android/app/src/main/res/mipmap-xxxhdpi
+
       - name: Set app name
         run: |
           sed -i 's/android:label="[^"]*"/android:label="FarmBook"/' android/app/src/main/AndroidManifest.xml
