@@ -31,7 +31,7 @@ jobs:
         run: flutter create --platforms=android --org com.rohitjagtap --project-name agri_spray_offline .
 
       - name: Remove default Flutter test
-       run: rm -f test/widget_test.dart
+        run: rm -f test/widget_test.dart
        
       - name: Install dependencies
         run: flutter pub get
