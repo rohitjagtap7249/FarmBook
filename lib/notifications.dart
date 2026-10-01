@@ -175,6 +175,14 @@ class NotificationService {
         final exact = await android?.canScheduleExactNotifications();
         lines.add('Exact alarms allowed: ${exact == null ? '?' : (exact ? 'yes' : 'no')}');
       } catch (_) {}
+      final probe = await schedule(
+        id: 999997,
+        title: 'probe',
+        body: 'probe',
+        when: DateTime.now().add(const Duration(hours: 1)),
+      );
+      lines.add('Scheduling test: ${probe ? 'OK' : 'FAILED'}');
+      if (probe) await _plugin.cancel(999997);
       final pending = await _plugin.pendingNotificationRequests();
       lines.add('Reminders waiting: ${pending.length}');
     } catch (e) {
