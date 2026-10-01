@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'chemical_picker.dart';
 import 'helpers.dart';
 import 'stock_data.dart';
 
@@ -123,18 +124,24 @@ class _ChemicalStockPageState extends State<ChemicalStockPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<Map<String, dynamic>>(
-                    value: selected,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Chemical'),
-                    items: [
-                      for (final c in chemicals)
-                        DropdownMenuItem(
-                          value: c,
-                          child: Text(c['name'].toString()),
-                        ),
-                    ],
-                    onChanged: (v) => setLocal(() => selected = v ?? selected),
+                  PickerField(
+                    label: 'Chemical',
+                    value: selected['name'].toString(),
+                    onTap: () async {
+                      final name = await pickFromList(
+                        ctx,
+                        title: 'Choose chemical',
+                        items: [for (final c in chemicals) c['name'].toString()],
+                        selected: selected['name'].toString(),
+                      );
+                      if (name == null) return;
+                      setLocal(() {
+                        selected = chemicals.firstWhere(
+                          (c) => c['name'].toString() == name,
+                          orElse: () => selected,
+                        );
+                      });
+                    },
                   ),
                   const SizedBox(height: 12),
                   Row(

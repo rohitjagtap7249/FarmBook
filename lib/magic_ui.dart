@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'chemical_picker.dart';
 import 'database.dart';
 import 'magic_engine.dart';
 import 'notifications.dart';
@@ -403,19 +404,18 @@ class _MagicModePageState extends State<MagicModePage> {
               ),
               if (activity == 'spray') ...[
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
+                PickerField(
+                  label: 'Select chemical',
                   value: chem,
-                  isExpanded: true,
-                  decoration:
-                      const InputDecoration(labelText: 'Select chemical'),
-                  items: [
-                    for (final c in chemRows)
-                      DropdownMenuItem(
-                        value: c['name'].toString(),
-                        child: Text(c['name'].toString()),
-                      ),
-                  ],
-                  onChanged: (v) => setLocal(() => chem = v ?? chem),
+                  onTap: () async {
+                    final name = await pickFromList(
+                      ctx,
+                      title: 'Choose chemical',
+                      items: [for (final c in chemRows) c['name'].toString()],
+                      selected: chem,
+                    );
+                    if (name != null) setLocal(() => chem = name);
+                  },
                 ),
               ],
               const SizedBox(height: 14),
