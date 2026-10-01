@@ -105,7 +105,9 @@ jobs:
             echo "An APK built this way will NOT install over a previous build."
             exit 0
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/farmbook.jks
+          printf '%s' "$KEYSTORE_BASE64" | tr -d ' \n\r\t"' > /tmp/ks.b64
+          echo "Secret length: $(wc -c < /tmp/ks.b64) characters (expected 3644)"
+          base64 -d /tmp/ks.b64 > android/app/farmbook.jks
           {
             echo "storePassword=$KEYSTORE_PASSWORD"
             echo "keyPassword=$KEY_PASSWORD"
