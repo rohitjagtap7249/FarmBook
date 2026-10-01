@@ -149,20 +149,6 @@ Future<_OverviewData> _collect({
   );
 }
 
-// Colours taken from the sample expense-summary layout.
-const Color _ink = Color(0xFF0F172A);
-const Color _subInk = Color(0xFF64748B);
-const Color _accent = Color(0xFF2A87B5);
-const Color _accentDark = Color(0xFF1B6E9C);
-const Color _paper = Color(0xFFF8FAFC);
-const Color _altRow = Color(0xFFF3F6FA);
-const Color _rowText = Color(0xFF1E293B);
-const Color _noteText = Color(0xFF475569);
-const Color _totalBg = Color(0xFFEAF6FD);
-const Color _totalLine = Color(0xFF9BD1EE);
-const Color _border = Color(0xFFE2E8F0);
-const Color _footer = Color(0xFF94A3B8);
-
 /// Palette taken from the approved "expense summary" sample layout.
 const Color _ink = Color(0xFF0F172A);
 const Color _muted = Color(0xFF64748B);
