@@ -51,6 +51,7 @@ class ReminderItem {
     this.intervalDays,
     this.dueAt,
     this.daysSince,
+    this.manual = false,
   });
 
   final String key;
@@ -67,6 +68,10 @@ class ReminderItem {
   final int? intervalDays;
   final DateTime? dueAt;
   final int? daysSince;
+
+  /// True when the farmer set the frequency by hand instead of letting
+  /// FarmBook learn it from the records.
+  final bool manual;
 }
 
 String _monthDay(DateTime d) {
@@ -95,7 +100,9 @@ String reminderBody(ReminderItem it, {bool includeDaysSince = false}) {
   final lastTxt = it.last == null ? '' : ' on ${_monthDay(it.last!)}';
   final gap = it.intervalDays == null
       ? ''
-      : ' Your recent records were about ${it.intervalDays} days apart.';
+      : (it.manual
+          ? ' You set this to repeat every ${it.intervalDays} days.'
+          : ' Your recent records were about ${it.intervalDays} days apart.');
   final since = (includeDaysSince && it.daysSince != null)
       ? ' It has now been ${it.daysSince} days.'
       : '';
@@ -143,6 +150,7 @@ class MagicEngine {
     required String activity,
     required int plotId,
     String chemical = '',
+    int? intervalDays,
   }) async {
     final db = await AppDatabase.instance.database;
     final existing = await db.query(
@@ -154,7 +162,7 @@ class MagicEngine {
     if (existing.isNotEmpty) {
       await db.update(
         'reminder_rules',
-        {'enabled': 1},
+        {'enabled': 1, 'interval_days': intervalDays},
         where: 'id = ?',
         whereArgs: [existing.first['id']],
       );
@@ -165,6 +173,7 @@ class MagicEngine {
       'activity': activity,
       'plot_id': plotId,
       'chemical_name': chemical,
+      'interval_days': intervalDays,
       'enabled': 1,
       'created_at': DateTime.now().toIso8601String(),
     });
@@ -344,9 +353,22 @@ class MagicEngine {
     required int plotId,
     required String plotTitle,
     required String chemical,
+    int? manualInterval,
   }) async {
     final key = '$activity|$plotId|${chemical.toLowerCase()}';
     final dates = await _dates(activity, plotId, chemical);
+    if (manualInterval != null && manualInterval >= 1) {
+      return _buildManual(
+        key: key,
+        mode: mode,
+        activity: activity,
+        plotId: plotId,
+        plotTitle: plotTitle,
+        chemical: chemical,
+        dates: dates,
+        interval: manualInterval,
+      );
+    }
     final result = analyze(dates);
     if (result == null || dates.isEmpty) {
       return ReminderItem(
@@ -398,6 +420,61 @@ class MagicEngine {
     );
   }
 
+  /// Fixed frequency chosen by the farmer: needs only one past record.
+  static ReminderItem _buildManual({
+    required String key,
+    required String mode,
+    required String activity,
+    required int plotId,
+    required String plotTitle,
+    required String chemical,
+    required List<DateTime> dates,
+    required int interval,
+  }) {
+    if (dates.isEmpty) {
+      return ReminderItem(
+        key: key,
+        mode: mode,
+        activity: activity,
+        plotId: plotId,
+        plotTitle: plotTitle,
+        chemical: chemical,
+        datesCount: 0,
+        status: 'learning',
+        intervalDays: interval,
+        manual: true,
+      );
+    }
+    final last = dates.last;
+    final dueAt = DateTime(last.year, last.month, last.day + interval, 8, 0);
+    final now = DateTime.now();
+    final todayUtc = DateTime.utc(now.year, now.month, now.day);
+    final daysSince = todayUtc.difference(last).inDays;
+    String status;
+    if (now.isBefore(dueAt)) {
+      status = 'watching';
+    } else if (daysSince <= interval * 4 && daysSince <= 180) {
+      status = 'due';
+    } else {
+      status = 'inactive';
+    }
+    return ReminderItem(
+      key: key,
+      mode: mode,
+      activity: activity,
+      plotId: plotId,
+      plotTitle: plotTitle,
+      chemical: chemical,
+      datesCount: dates.length,
+      status: status,
+      last: last,
+      intervalDays: interval,
+      dueAt: dueAt,
+      daysSince: daysSince,
+      manual: true,
+    );
+  }
+
   /// Evaluates every enabled rule. Read-only: never writes farm records.
   static Future<List<ReminderItem>> evaluate() async {
     final db = await AppDatabase.instance.database;
@@ -420,6 +497,7 @@ class MagicEngine {
         plotId: plotId,
         plotTitle: plots[plotId]!,
         chemical: chem,
+        manualInterval: r['interval_days'] as int?,
       );
       byKey[item.key] = item;
     }

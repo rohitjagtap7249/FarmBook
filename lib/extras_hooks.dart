@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:sqflite/sqflite.dart';
+
 import 'cloud_backup.dart';
+import 'database.dart';
 import 'magic_engine.dart';
 import 'magic_ui.dart';
 import 'notifications.dart';
@@ -22,6 +25,7 @@ class ExtrasHooks {
       final service = NotificationService.instance;
       service.onTapPayload = handlePayload;
       await service.init();
+      await _askNotificationPermissionOnce();
       await TaskStore.rescheduleAll();
       final launch = await service.launchPayload();
       if (launch != null && launch.isNotEmpty) {
@@ -30,6 +34,26 @@ class ExtrasHooks {
       }
     } catch (e) {
       debugPrint('Extras start failed: $e');
+    }
+  }
+
+  static Future<void> _askNotificationPermissionOnce() async {
+    try {
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'app_settings',
+        where: 'key = ?',
+        whereArgs: ['notif_asked'],
+      );
+      if (rows.isNotEmpty && rows.first['value'] == '1') return;
+      await NotificationService.instance.requestPermission();
+      await db.insert(
+        'app_settings',
+        {'key': 'notif_asked', 'value': '1'},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('Permission prompt skipped: $e');
     }
   }
 

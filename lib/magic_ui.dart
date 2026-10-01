@@ -287,7 +287,7 @@ class _MagicReminderPageState extends State<MagicReminderPage> {
         subtitle: Text(
           '${r['plot_title'] ?? ''}'
           '${chem.isEmpty ? '' : '\n$chem'}'
-          '${item?.intervalDays == null ? '' : '\nApprox. interval: ${item!.intervalDays} days'}'
+          '${item?.intervalDays == null ? '' : (item!.manual ? '\nEvery ${item.intervalDays} days (set by you)' : '\nApprox. interval: ${item.intervalDays} days')}'
           '\nStatus: ${_statusText(item?.status ?? 'learning')}',
         ),
         isThreeLine: true,
@@ -377,6 +377,8 @@ class _MagicModePageState extends State<MagicModePage> {
     }
     int plotId = plots.first['id'] as int;
     String chem = chemRows.isEmpty ? '' : chemRows.first['name'].toString();
+    bool fixedFrequency = false;
+    final daysCtrl = TextEditingController(text: '7');
 
     final ok = await showDialog<bool>(
       context: context,
@@ -416,12 +418,34 @@ class _MagicModePageState extends State<MagicModePage> {
                   onChanged: (v) => setLocal(() => chem = v ?? chem),
                 ),
               ],
-              const SizedBox(height: 10),
-              const Text(
-                'FarmBook learns the timing from your past records. It needs '
-                'at least two matching gaps before it can notice a pattern.',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+              const SizedBox(height: 14),
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Learn')),
+                  ButtonSegment(value: true, label: Text('Set frequency')),
+                ],
+                selected: {fixedFrequency},
+                onSelectionChanged: (v) =>
+                    setLocal(() => fixedFrequency = v.first),
               ),
+              const SizedBox(height: 10),
+              if (fixedFrequency)
+                TextField(
+                  controller: daysCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Repeat every (days)',
+                    helperText: 'Counted from the last matching record.',
+                  ),
+                )
+              else
+                const Text(
+                  'FarmBook learns the timing from your past records. It '
+                  'needs at least two matching gaps before it can notice a '
+                  'pattern.',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
             ],
           ),
           actions: [
@@ -437,11 +461,22 @@ class _MagicModePageState extends State<MagicModePage> {
         ),
       ),
     );
+    final days = int.tryParse(daysCtrl.text.trim());
+    daysCtrl.dispose();
     if (ok != true) return false;
+    if (fixedFrequency && (days == null || days < 1 || days > 365)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a frequency between 1 and 365 days.')),
+        );
+      }
+      return false;
+    }
     await MagicEngine.addPatternRule(
       activity: activity,
       plotId: plotId,
       chemical: activity == 'spray' ? chem : '',
+      intervalDays: fixedFrequency ? days : null,
     );
     return true;
   }
@@ -491,7 +526,8 @@ class _MagicModePageState extends State<MagicModePage> {
                 contentPadding: const EdgeInsets.fromLTRB(28, 0, 8, 0),
                 title: Text(
                   '${r['plot_title'] ?? ''}'
-                  '${r['chemical_name'].toString().isEmpty ? '' : ' • ${r['chemical_name']}'}',
+                  '${r['chemical_name'].toString().isEmpty ? '' : ' • ${r['chemical_name']}'}'
+                  '${r['interval_days'] == null ? '' : ' • every ${r['interval_days']} d'}',
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,

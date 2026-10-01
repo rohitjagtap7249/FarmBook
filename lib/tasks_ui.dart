@@ -82,7 +82,34 @@ class _TasksPageState extends State<TasksPage> {
     final pending = _tasks.where((t) => (t['done'] as int) == 0).toList();
     final done = _tasks.where((t) => (t['done'] as int) == 1).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Tasks')),
+      appBar: AppBar(
+        title: const Text('Tasks'),
+        actions: [
+          IconButton(
+            tooltip: 'Send a test reminder',
+            icon: const Icon(Icons.notifications_active_outlined),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              await NotificationService.instance.requestPermission();
+              await NotificationService.instance.schedule(
+                id: 999999,
+                title: 'FarmBook test reminder',
+                body: 'If you can see this, task reminders will work.',
+                when: DateTime.now().add(const Duration(seconds: 10)),
+                payload: 'task:0',
+              );
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Test reminder in 10 seconds. Leave the app or lock the '
+                    'screen to see it pop up.',
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(),
         icon: const Icon(Icons.add),

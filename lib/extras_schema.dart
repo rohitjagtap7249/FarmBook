@@ -60,4 +60,11 @@ Future<void> createExtraTables(Database db) async {
       created_at TEXT NOT NULL
     )
   ''');
+  // Optional fixed frequency (days) for Pattern Reminder. NULL = learn
+  // the interval from the farm records.
+  final cols = await db.rawQuery('PRAGMA table_info(reminder_rules)');
+  final has = cols.any((c) => c['name'] == 'interval_days');
+  if (!has) {
+    await db.execute('ALTER TABLE reminder_rules ADD COLUMN interval_days INTEGER');
+  }
 }

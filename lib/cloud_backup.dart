@@ -428,6 +428,7 @@ class CloudBackup {
           'activity': activity,
           'plot_id': plotId,
           'chemical_name': chem,
+          'interval_days': (r['interval_days'] as num?)?.toInt(),
           'enabled': (r['enabled'] as num?)?.toInt() ?? 1,
           'created_at':
               r['created_at']?.toString() ?? DateTime.now().toIso8601String(),

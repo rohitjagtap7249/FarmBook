@@ -11,6 +11,7 @@ import 'database.dart';
 import 'helpers.dart';
 import 'models.dart';
 import 'activity_queries.dart';
+import 'user_profile.dart';
 import 'extras_ui.dart';
 
 
@@ -196,9 +197,11 @@ class _FarmDashboardPageState extends State<FarmDashboardPage> {
       lastSprays[id] = await AppDatabase.instance.getLastSprayForPlot(id);
     }
     ExtrasHooks.onHomeLoaded();
+    final savedName = await UserProfile.name();
 
     if (!mounted) return;
     setState(() {
+      _userName = savedName;
       _plots = plots;
       _lastSprayByPlot
         ..clear()
@@ -207,11 +210,14 @@ class _FarmDashboardPageState extends State<FarmDashboardPage> {
     });
   }
 
+  String _userName = '';
+
   String _greeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning! 👋';
-    if (hour < 17) return 'Good Afternoon! 👋';
-    return 'Good Evening! 👋';
+    final who = _userName.isEmpty ? '!' : ', $_userName!';
+    if (hour < 12) return 'Good Morning$who 👋';
+    if (hour < 17) return 'Good Afternoon$who 👋';
+    return 'Good Evening$who 👋';
   }
 
   /// Groups plots by crop variety (falling back to the plot title when no
@@ -606,45 +612,6 @@ class _MorePageState extends State<MorePage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          ListTile(
-            leading: const Icon(Icons.payments_outlined),
-            title: const Text('Earnings'),
-            subtitle: const Text('Record what you sold from a crop.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _openPerPlotPage(
-              'Earnings',
-              (plot) => EarningsPage(
-                plotId: plot['id'] as int,
-                plotTitle: plot['title'].toString(),
-              ),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.receipt_long_outlined),
-            title: const Text('Expenses'),
-            subtitle: const Text('Other farm expenses by crop / plot.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _openPerPlotPage(
-              'Expenses',
-              (plot) => OtherExpensesPage(
-                plotId: plot['id'] as int,
-                plotTitle: plot['title'].toString(),
-              ),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.groups_outlined),
-            title: const Text('Labour'),
-            subtitle: const Text('Track workers, days and wages.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _openPerPlotPage(
-              'Labour',
-              (plot) => LabourPage(
-                plotId: plot['id'] as int,
-                plotTitle: plot['title'].toString(),
-              ),
-            ),
-          ),
           ListTile(
             leading: const Icon(Icons.local_pharmacy_outlined),
             title: const Text('Pesticide Usage'),
@@ -2391,6 +2358,40 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool direct = false;
   bool loading = true;
+  String _name = '';
+
+  Future<void> _editName() async {
+    final ctrl = TextEditingController(text: _name);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Your name'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Rohit',
+            helperText: 'Shown in the Home greeting. Leave empty to remove.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null) return;
+    await UserProfile.setName(result);
+    if (mounted) setState(() => _name = result);
+  }
 
   @override
   void initState() {
@@ -2400,6 +2401,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _load() async {
     direct = await AppDatabase.instance.directLastPageEnabled();
+    _name = await UserProfile.name();
     if (!mounted) return;
     setState(() => loading = false);
   }
@@ -2413,6 +2415,17 @@ class _SettingsPageState extends State<SettingsPage> {
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: const Text('Your name'),
+                    subtitle: Text(
+                      _name.isEmpty ? 'Not set — tap to add' : _name,
+                    ),
+                    trailing: const Icon(Icons.edit_outlined),
+                    onTap: _editName,
+                  ),
+                ),
                 Card(
                   child: SwitchListTile(
                     title: const Text('Direct open last page'),

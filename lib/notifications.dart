@@ -63,6 +63,9 @@ class NotificationService {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       final granted = await android?.requestNotificationsPermission();
+      try {
+        await android?.requestExactAlarmsPermission();
+      } catch (_) {}
       return granted ?? true;
     } catch (e) {
       debugPrint('Permission request failed: $e');
@@ -73,11 +76,17 @@ class NotificationService {
   NotificationDetails _details() {
     return const NotificationDetails(
       android: AndroidNotificationDetails(
-        'farmbook_reminders',
+        'farmbook_reminders_v2',
         'FarmBook reminders',
         channelDescription: 'Task and Magic Reminder notifications',
-        importance: Importance.high,
-        priority: Priority.high,
+        importance: Importance.max,
+        priority: Priority.max,
+        category: AndroidNotificationCategory.reminder,
+        visibility: NotificationVisibility.public,
+        playSound: true,
+        enableVibration: true,
+        ticker: 'FarmBook reminder',
+        styleInformation: BigTextStyleInformation(''),
       ),
     );
   }
@@ -100,17 +109,27 @@ class NotificationService {
       final u = when.toUtc();
       final scheduled =
           tz.TZDateTime.utc(u.year, u.month, u.day, u.hour, u.minute, u.second);
-      await _plugin.zonedSchedule(
-        id,
-        title,
-        body,
-        scheduled,
-        _details(),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: payload,
-      );
+      Future<void> go(AndroidScheduleMode mode) {
+        return _plugin.zonedSchedule(
+          id,
+          title,
+          body,
+          scheduled,
+          _details(),
+          androidScheduleMode: mode,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          payload: payload,
+        );
+      }
+
+      try {
+        // Exact timing so the reminder pops up at the chosen minute.
+        await go(AndroidScheduleMode.exactAllowWhileIdle);
+      } catch (_) {
+        // Exact alarms not allowed on this phone: fall back to a close time.
+        await go(AndroidScheduleMode.inexactAllowWhileIdle);
+      }
     } catch (e) {
       debugPrint('Schedule failed: $e');
     }
