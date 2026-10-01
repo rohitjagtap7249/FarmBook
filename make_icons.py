@@ -40,7 +40,7 @@ def make_launcher(logo, size):
     out = Image.composite(bg, Image.new("RGBA", (size, size), (255,255,255,0)), mask)
 
     # Keep generous padding around the FarmBook mark.
-    target = int(size * 0.68)
+    target = int(size * 0.84)
     mark = logo.copy()
     mark.thumbnail((target, target), Image.Resampling.LANCZOS)
 
