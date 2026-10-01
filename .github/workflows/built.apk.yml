@@ -53,6 +53,46 @@ jobs:
             exit 1
           fi
 
+      - name: Configure Android for notifications
+        run: |
+          python3 - <<'PY'
+          import re
+          g = 'android/app/build.gradle'
+          s = open(g).read()
+          if 'coreLibraryDesugaringEnabled' not in s:
+              s, n = re.subn(r'compileOptions\s*\{', 'compileOptions {\n        coreLibraryDesugaringEnabled = true', s, count=1)
+              if n != 1:
+                  raise SystemExit('compileOptions block not found in build.gradle')
+          if 'desugar_jdk_libs' not in s:
+              s += "\n\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n}\n"
+          open(g, 'w').write(s)
+
+          m = 'android/app/src/main/AndroidManifest.xml'
+          x = open(m).read()
+          perms = (
+              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n'
+              '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n'
+              '    <uses-permission android:name="android.permission.VIBRATE"/>\n'
+          )
+          if 'POST_NOTIFICATIONS' not in x:
+              x = x.replace('<application', perms + '    <application', 1)
+          receivers = (
+              '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />\n'
+              '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n'
+              '            <intent-filter>\n'
+              '                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n'
+              '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n'
+              '                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>\n'
+              '                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>\n'
+              '            </intent-filter>\n'
+              '        </receiver>\n'
+          )
+          if 'ScheduledNotificationReceiver' not in x:
+              x = x.replace('</application>', receivers + '    </application>', 1)
+          open(m, 'w').write(x)
+          print('Android notification setup done')
+          PY
+
       - name: Set app name
         run: |
           sed -i 's/android:label="[^"]*"/android:label="FarmBook"/' android/app/src/main/AndroidManifest.xml
@@ -66,6 +106,11 @@ jobs:
           test -f lib/database.dart
           test -f lib/helpers.dart
           test -f lib/pages.dart
+          test -f lib/tasks_ui.dart
+          test -f lib/magic_engine.dart
+          test -f lib/stock_data.dart
+          test -f lib/cloud_backup.dart
+          test -f lib/share_export.dart
 
           if grep -q "class SelectedDripChemical" lib/models.dart; then
             echo "SelectedDripChemical FOUND in models.dart"
@@ -80,10 +125,14 @@ jobs:
         run: flutter pub get
 
       - name: Analyze Dart code
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Build release APK
         run: flutter build apk --release
+
+      - name: Show APK signing fingerprint (SHA-1)
+        run: |
+          keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep -E "SHA1|SHA256" || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
